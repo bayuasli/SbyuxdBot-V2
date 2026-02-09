@@ -1,0 +1,124 @@
+/** @type {import('#lib/types.js').Plugin} */
+import axios from 'axios'
+import fs from 'fs'
+import path from 'path'
+
+export default {
+  name: "backupgh",
+  category: "owner",
+  command: ["backup", "bpgh"],
+  alias: ["sv", "update"],
+
+  settings: {
+    owner: true,
+    private: false,
+    group: false,
+    admin: false,
+    botAdmin: false,
+    loading: false
+  },
+
+  run: async (conn, m) => {
+    try {
+      const repoOwner = 'bayuasli'
+      const repoName = 'SbyuxdBot-V2'
+      const token = 'Token_Ghp_lu'
+      const branch = 'main'
+
+      const ignoreList = ['node_modules', '.git', '.cache', '.npm', 'sessions']
+
+      function formatBytes(bytes) {
+        if (!bytes) return '0B'
+        const sizes = ['B','KB','MB','GB']
+        const i = Math.floor(Math.log(bytes) / Math.log(1024))
+        return (bytes / Math.pow(1024, i)).toFixed(2) + sizes[i]
+      }
+
+      async function uploadSingleFile(filepath, repoPath) {
+        try {
+          const stats = fs.statSync(filepath)
+          if (stats.size > 95 * 1024 * 1024) return false
+
+          const content = fs.readFileSync(filepath)
+          const base64Content = content.toString('base64')
+
+          let sha
+          try {
+            const meta = await axios.get(
+              `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${repoPath}?ref=${branch}`,
+              { headers: { Authorization: `token ${token}` } }
+            )
+            sha = meta.data.sha
+          } catch {}
+
+          await axios.put(
+            `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${repoPath}`,
+            {
+              message: `backup ${repoPath}`,
+              content: base64Content,
+              branch,
+              ...(sha ? { sha } : {})
+            },
+            {
+              headers: {
+                Authorization: `token ${token}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          )
+
+          return true
+        } catch {
+          return false
+        }
+      }
+
+      function collectFiles(dir, base = '') {
+        let results = []
+        const items = fs.readdirSync(dir)
+
+        for (const item of items) {
+          if (ignoreList.includes(item)) continue
+
+          const fullPath = path.join(dir, item)
+          const relativePath = path.join(base, item)
+          const stat = fs.statSync(fullPath)
+
+          if (stat.isDirectory()) {
+            results = results.concat(collectFiles(fullPath, relativePath))
+          } else {
+            results.push({ fullPath, repoPath: relativePath })
+          }
+        }
+
+        return results
+      }
+
+      const root = process.cwd()
+      const allFiles = collectFiles(root)
+
+      await m.reply(`📦 Total file terdeteksi: ${allFiles.length}\n⏳ Memulai upload...`)
+
+      let success = 0
+      let failed = 0
+
+      for (const file of allFiles) {
+        const ok = await uploadSingleFile(file.fullPath, file.repoPath)
+        if (ok) success++
+        else failed++
+
+        await new Promise(r => setTimeout(r, 250)) // anti rate limit
+      }
+
+      await m.reply(
+        `✅ Backup selesai\n\n` +
+        `✔ Berhasil: ${success}\n` +
+        `❌ Gagal: ${failed}\n\n` +
+        `🔗 https://github.com/${repoOwner}/${repoName}/tree/${branch}`
+      )
+
+    } catch (err) {
+      await m.reply(`❌ Backup gagal\n\n${err.message}`)
+    }
+  }
+}
