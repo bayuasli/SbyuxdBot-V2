@@ -1,126 +1,108 @@
-/** @type {import('#lib/types.js').Plugin} */
-import crypto from 'crypto'
-import { generateWAMessageFromContent } from '@whiskeysockets/baileys'
+import crypto from "node:crypto"
+import {
+  generateWAMessageContent,
+  generateWAMessageFromContent
+} from "@whiskeysockets/baileys"
 
+/**
+ * @type {import('#lib/types.js').Plugin}
+ */
 export default {
   name: "gcsw",
   category: "owner",
-  command: ["gcsw", "swgc", "toswgc"],
+  command: ["gcsw", "swgc", "swgrup"],
 
   settings: {
-    owner: true
+    owner: true,
+    group: false,
+    botAdmin: false
   },
 
-  run: async (conn, m) => {
+  run: async (conn, m, { quoted }) => {
     try {
-      const text = m.text || ""
-      conn._gcsw ??= {}
+      const q = quoted || m
+      const mime = (q.msg || q).mimetype || ""
+      const text = m.text?.trim()
 
-      // =========================
-      // PHASE 2 (Kirim ke grup)
-      // =========================
-      if (/^\d+$/.test(text.trim())) {
-        const session = conn._gcsw[m.sender]
-        if (!session) return m.reply("Belum ada konten. Kirim teks / reply media dulu pakai .gcsw")
+      let payload = {}
 
-        const index = parseInt(text) - 1
-        const group = session.groups[index]
-        if (!group) return m.reply("Nomor grup tidak valid.")
+      // ===== DETEKSI MEDIA =====
+      if (/image/.test(mime)) {
+        payload = {
+          image: await q.download(),
+          caption: text || q.text || ""
+        }
+      } 
+      else if (/video/.test(mime)) {
+        payload = {
+          video: await q.download(),
+          caption: text || q.text || ""
+        }
+      } 
+      else if (/audio/.test(mime)) {
+        payload = {
+          audio: await q.download(),
+          mimetype: "audio/mp4",
+          ptt: false
+        }
+      } 
+      else if (text) {
+        payload = {
+          text,
+          backgroundColor: "#7ACAA7"
+        }
+      } 
+      else {
+        return m.reply("Reply media atau kirim teks untuk dijadikan status grup.")
+      }
+
+      // ===== CORE GCSW FUNCTION =====
+      const groupStatus = async (jid, content) => {
+        const { backgroundColor } = content
+        delete content.backgroundColor
+
+        const inside = await generateWAMessageContent(content, {
+          upload: conn.waUploadToServer,
+          backgroundColor
+        })
 
         const messageSecret = crypto.randomBytes(32)
 
-        const content = session.content
-
         const msg = generateWAMessageFromContent(
-          group.id,
+          jid,
           {
+            messageContextInfo: { messageSecret },
             groupStatusMessageV2: {
-              message: content,
-              messageContextInfo: {
-                messageSecret
+              message: {
+                ...inside,
+                messageContextInfo: { messageSecret }
               }
             }
           },
-          { userJid: conn.user.id }
+          {}
         )
 
-        await conn.relayMessage(group.id, msg.message, {
+        await conn.relayMessage(jid, msg.message, {
           messageId: msg.key.id
         })
 
-        delete conn._gcsw[m.sender]
-        return m.reply(`Status berhasil dikirim ke ${group.subject}`)
+        return msg
       }
 
-      // =========================
-      // PHASE 1 (Prepare konten)
-      // =========================
-      const quoted = m.isQuoted ? m.quoted : m
-      const mime = quoted?.msg?.mimetype || ""
-      const teks = text || quoted?.text || quoted?.caption
+      await groupStatus(m.chat, payload)
 
-      if (!/image|video/.test(mime) && !teks)
-        return m.reply("Reply gambar/video atau kirim teks dulu.")
-
-      let content
-
-      if (/image|video/.test(mime)) {
-        const buffer = await quoted.download()
-        if (!buffer) return m.reply("Gagal ambil media.")
-
-        if (buffer.length > 16 * 1024 * 1024)
-          return m.reply("Media terlalu besar. Maks 16MB.")
-
-        const type = mime.split("/")[0]
-
-        content = {
-          [type]: buffer,
-          caption: teks || ""
-        }
-      } else {
-        content = {
-          text: teks,
-          backgroundColor: "#000000"
-        }
-      }
-
-      // =========================
-      // Ambil grup (ANTI KOSONG)
-      // =========================
-
-      let groupsData
-
-      try {
-        groupsData = await conn.groupFetchAllParticipating()
-      } catch {
-        // fallback kalau error
-        groupsData = conn.chats
-      }
-
-      const groups = Object.entries(groupsData)
-        .filter(([jid]) => jid.endsWith("@g.us"))
-        .map(([id, data]) => ({
-          id,
-          subject: data.subject || "Unknown Group"
-        }))
-
-      if (!groups.length)
-        return m.reply("Bot belum terdeteksi join grup manapun. Coba restart panel setelah join grup.")
-
-      let list = "Pilih grup tujuan:\n\n"
-      groups.forEach((g, i) => {
-        list += `${i + 1}. ${g.subject}\n`
+      await conn.sendMessage(m.chat, {
+        react: { text: "✅", key: m.key }
       })
 
-      list += "\nKetik: .gcsw <nomor>"
-
-      conn._gcsw[m.sender] = { content, groups }
-
-      return m.reply(list)
-
     } catch (err) {
-      console.error("[GCSW ERROR]", err)
-      return m.reply("Terjadi error saat menjalankan gcsw.")
+      console.error(err)
+
+      await conn.sendMessage(m.chat, {
+        react: { text: "❌", key: m.key }
+      })
+
+      m.reply("Gagal mengirim status grup.")
     }
   }
 }
