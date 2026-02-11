@@ -26,7 +26,7 @@ export default {
 
       let payload = {}
 
-      // ===== DETEKSI MEDIA =====
+      
       if (/image/.test(mime)) {
         payload = {
           image: await q.download(),
