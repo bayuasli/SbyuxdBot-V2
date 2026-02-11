@@ -13,7 +13,7 @@ export default {
   command: ["gcsw", "swgc", "swgrup"],
 
   settings: {
-    owner: true,
+    owner: false,//true kan aj*own only
     group: false,
     botAdmin: false
   },
@@ -56,7 +56,7 @@ export default {
         return m.reply("Reply media atau kirim teks untuk dijadikan status grup.")
       }
 
-      // ===== CORE GCSW FUNCTION =====
+
       const groupStatus = async (jid, content) => {
         const { backgroundColor } = content
         delete content.backgroundColor
