@@ -48,7 +48,7 @@ export default {
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ┃ 📦 Categories : ${totalKategori}
 ┃ 🧩 Features   : ${totalFitur}
-┃ ⚙ Baileys    : baileys 7.0.0-rc.6
+┃ ⚙ Baileys    : @whiskeysockets/baileys": "^7.0.0-rc.9
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `
 
