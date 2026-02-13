@@ -11,41 +11,30 @@ export default {
     owner: true
   },
 
-  run: async (conn, m, { args }) => {
+  run: async (conn, m) => {
     try {
+      const name = m.args?.[0]
+      if (!name) return m.reply("Contoh: .getscrape getpastebin")
+
       const folderPath = path.resolve("./lib/scrape")
-      const files = (await fs.readdir(folderPath)).filter(v => v.endsWith(".js"))
-
-      if (!files.length) {
-        return m.reply("Folder scraper kosong.")
-      }
-
-      if (!args[0]) {
-        const list = files
-          .map((v, i) => `${i + 1}. ${v.replace(".js", "")}`)
-          .join("\n")
-
-        return m.reply(`Pilih nomor file:\n\n${list}`)
-      }
-
-      const index = parseInt(args[0]) - 1
-      if (isNaN(index) || index < 0 || index >= files.length) {
-        const list = files
-          .map((v, i) => `${i + 1}. ${v.replace(".js", "")}`)
-          .join("\n")
-
-        return m.reply(`Nomor tidak valid.\n\n${list}`)
-      }
-
-      const fileName = files[index]
+      const fileName = name.endsWith(".js") ? name : name + ".js"
       const filePath = path.join(folderPath, fileName)
+
+      await fs.access(filePath).catch(() => {
+        throw new Error("File tidak ditemukan")
+      })
+
       const fileBuffer = await fs.readFile(filePath)
 
-      await conn.sendMessage(m.chat, {
-        document: fileBuffer,
-        mimetype: "application/javascript",
-        fileName
-      })
+      await conn.sendMessage(
+        m.chat,
+        {
+          document: fileBuffer,
+          mimetype: "application/javascript",
+          fileName
+        },
+        { quoted: m }
+      )
 
     } catch (e) {
       m.reply("Gagal: " + e.message)
