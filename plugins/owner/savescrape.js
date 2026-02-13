@@ -5,8 +5,8 @@ import path from "path"
 export default {
   name: "savescrape",
   category: "owner",
-  command: ["savescrape", "save", "svscr"],
-  alias: ["sscrape", "sv"],
+  command: ["savescrape", "addscr", "svscr"],
+  alias: ["sscrape", "addskrep"],
   
   settings: {
     owner: true
